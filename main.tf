@@ -36,11 +36,11 @@ module "vpc" {
 
     enable_nat_gateway = true
 
-    public_subnets_tags = {
+    public_subnet_tags = {
         "kubernetes.io/role/elb" = 1
     }
 
-    private_subnets_tags = {
+    private_subnet_tags = {
         "kubernetes.io/role/internal-elb" = 1
     }
 }
@@ -100,12 +100,6 @@ module "eks" {
       use_custom_launch_template = false
 
       disk_size = 50
-
-      # Remote access cannot be specified with a launch template
-      remote_access = {
-        ec2_ssh_key               = module.key_pair.key_pair_name
-        source_security_group_ids = [aws_security_group.remote_access.id]
-      }
     }
 
     # AL2023 node group utilizing new user data format which utilizes nodeadm
@@ -162,7 +156,6 @@ module "eks" {
     # Custom AMI, using module provided bootstrap data
     bottlerocket_custom = {
       # Current bottlerocket AMI
-      ami_id   = data.aws_ami.eks_default_bottlerocket.image_id
       platform = "bottlerocket"
 
       # Use module user data template to bootstrap
@@ -198,7 +191,6 @@ module "eks" {
     custom_ami = {
       ami_type = "AL2_ARM_64"
       # Current default AMI used by managed node groups - pseudo "custom"
-      ami_id = data.aws_ami.eks_default_arm.image_id
 
       # This will ensure the bootstrap user data is used to join the node
       # By default, EKS managed node groups will not append bootstrap script;
@@ -220,7 +212,6 @@ module "eks" {
       max_size     = 7
       desired_size = 1
 
-      ami_id                     = data.aws_ami.eks_default.image_id
       enable_bootstrap_user_data = true
 
       pre_bootstrap_user_data = <<-EOT
@@ -250,7 +241,6 @@ module "eks" {
             iops                  = 3000
             throughput            = 150
             encrypted             = true
-            kms_key_id            = module.ebs_kms_key.key_arn
             delete_on_termination = true
           }
         }
@@ -303,51 +293,11 @@ module "eks" {
     }
   }
 
-  access_entries = {
-    # One access entry with a policy associated
-    ex-single = {
-      kubernetes_groups = []
-      principal_arn     = aws_iam_role.this["single"].arn
-
-      policy_associations = {
-        single = {
-          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSViewPolicy"
-          access_scope = {
-            namespaces = ["default"]
-            type       = "namespace"
-          }
-        }
-      }
-    }
-
-    # Example of adding multiple policies to a single access entry
-    ex-multiple = {
-      kubernetes_groups = []
-      principal_arn     = aws_iam_role.this["multiple"].arn
-
-      policy_associations = {
-        ex-one = {
-          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSEditPolicy"
-          access_scope = {
-            namespaces = ["default"]
-            type       = "namespace"
-          }
-        }
-        ex-two = {
-          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSViewPolicy"
-          access_scope = {
-            type = "cluster"
-          }
-        }
-      }
-    }
-  }
-
   tags = local.tags
 }
 
-module "disabled_eks" {
-  source = "../.."
-
-  create = false
+resource "aws_iam_policy_attachment" "attach_policy" {
+  name       = "eks-policy-attachment"
+  policy_arn = "arn:aws:iam::019509494827:user/EKSDev"
+  roles      = ["arn:aws:iam::019509494827:role/EKSDev"]
 }
